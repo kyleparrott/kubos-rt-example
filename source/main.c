@@ -14,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -29,6 +31,8 @@
 
 #include <csp/csp.h>
 #include <csp/arch/csp_thread.h>
+#include <csp/drivers/usart.h>
+#include <csp/interfaces/csp_if_kiss.h>
 
 #define MY_ADDRESS 1
 #define MY_PORT    10
@@ -36,6 +40,9 @@
 
 static xQueueHandle button_queue;
 
+/* Setup CSP interface */
+static csp_iface_t csp_if_kiss;
+static csp_kiss_handle_t csp_kiss_driver;
 
 static inline void blink(int pin) {
     k_gpio_write(pin, 1);
@@ -46,7 +53,8 @@ static inline void blink(int pin) {
 
 void csp_server(void *p) {
     (void) p;
-
+    //char* buf = malloc(1);
+    portBASE_TYPE task_woken = pdFALSE;
     /* Create socket without any socket options */
     csp_socket_t *sock = csp_socket(CSP_SO_NONE);
 
@@ -63,8 +71,15 @@ void csp_server(void *p) {
     /* Process incoming connections */
     while (1) {
 
-        /* Wait for connection, 10000 ms timeout */
-        if ((conn = csp_accept(sock, 10000)) == NULL)
+        //TODO: make to work with other UART on same bus (printf)
+        while (usart_messages_waiting(K_UART6))
+        {
+            /* send char pointer from UART to KISS interface */
+            csp_kiss_rx(&csp_if_kiss, (uint8_t*)usart_getc(), 1, &task_woken);
+        }
+
+        /* Wait for connection, 100 ms timeout */
+        if ((conn = csp_accept(sock, 100)) == NULL)
             continue;
 
         /* Read packets. Timout is 100 ms */
@@ -101,26 +116,6 @@ void csp_client(void *p) {
     csp_conn_t * conn;
     portBASE_TYPE status;
     int signal;
-
-    /**
-     * Try ping
-     */
-
-    csp_sleep_ms(200);
-
-    #ifdef TARGET_LIKE_MSP430
-    blink(K_LED_RED);
-    #else
-    blink(K_LED_ORANGE);
-    #endif
-    int result = csp_ping(MY_ADDRESS, 100, 100, CSP_O_NONE);
-    if (result) {
-        #ifdef TARGET_LIKE_MSP430
-        blink(K_LED_RED);
-        #else
-        blink(K_LED_ORANGE);
-        #endif
-    }
 
     /**
      * Try data packet to server
@@ -186,15 +181,6 @@ void task_button_press(void *p) {
     }
 }
 
-void task_echo(void *p) {
-    static int x = 0;
-    while (1) {
-        printf("echo, x=%d\r\n", x);
-        x++;
-        vTaskDelay(2000 / portTICK_RATE_MS);
-    }
-}
-
 int main(void)
 {
     k_uart_console_init();
@@ -221,14 +207,26 @@ int main(void)
 
     button_queue = xQueueCreate(10, sizeof(int));
 
-    csp_buffer_init(5, 100);
+    struct usart_conf conf;
+
+    /* set the device in KISS / UART interface */
+    char dev = (char)K_UART6;
+    conf.device = &dev;
+    usart_init(&conf);
+
+    /* init kiss interface */
+    csp_kiss_init(&csp_if_kiss, &csp_kiss_driver, usart_putc, usart_insert, "KISS");
+
+    /* csp buffer must be 256, or mtu in csp_iface must match */
+    csp_buffer_init(5, 256);
     csp_init(MY_ADDRESS);
+    /* set to route through KISS / UART */
+    csp_route_set(MY_ADDRESS, &csp_if_kiss, CSP_NODE_MAC);
     csp_route_start_task(500, 1);
 
     xTaskCreate(csp_server, "CSPSRV", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
     xTaskCreate(csp_client, "CSPCLI", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
     xTaskCreate(task_button_press, "BUTTON", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
-    xTaskCreate(task_echo, "ECHO", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
 
     vTaskStartScheduler();
 
