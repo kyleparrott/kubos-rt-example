@@ -53,7 +53,7 @@ static inline void blink(int pin) {
 
 void csp_server(void *p) {
     (void) p;
-    //char* buf = malloc(1);
+    char buf = 0;
     portBASE_TYPE task_woken = pdFALSE;
     /* Create socket without any socket options */
     csp_socket_t *sock = csp_socket(CSP_SO_NONE);
@@ -74,8 +74,9 @@ void csp_server(void *p) {
         //TODO: make to work with other UART on same bus (printf)
         while (usart_messages_waiting(K_UART6))
         {
+            buf = usart_getc();
             /* send char pointer from UART to KISS interface */
-            csp_kiss_rx(&csp_if_kiss, (uint8_t*)usart_getc(), 1, &task_woken);
+            csp_kiss_rx(&csp_if_kiss, (uint8_t*)&buf, 1, &task_woken);
         }
 
         /* Wait for connection, 100 ms timeout */
