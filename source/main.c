@@ -53,7 +53,7 @@ static inline void blink(int pin) {
 
 void csp_server(void *p) {
     (void) p;
-    char buf = 0;
+
     portBASE_TYPE task_woken = pdFALSE;
     /* Create socket without any socket options */
     csp_socket_t *sock = csp_socket(CSP_SO_NONE);
@@ -71,13 +71,15 @@ void csp_server(void *p) {
     /* Process incoming connections */
     while (1) {
 
+        printf("goodbye");
+
         //TODO: make to work with other UART on same bus (printf)
-        while (usart_messages_waiting(K_UART6))
-        {
-            buf = usart_getc();
-            /* send char pointer from UART to KISS interface */
-            csp_kiss_rx(&csp_if_kiss, (uint8_t*)&buf, 1, &task_woken);
-        }
+//        while (usart_messages_waiting(K_UART6))
+//        {
+//            buf = usart_getc();
+//            /* send char pointer from UART to KISS interface */
+//            csp_kiss_rx(&csp_if_kiss, (uint8_t*)&buf, 1, &task_woken);
+//        }
 
         /* Wait for connection, 100 ms timeout */
         if ((conn = csp_accept(sock, 100)) == NULL)
@@ -147,7 +149,7 @@ void csp_client(void *p) {
 
         blink(K_LED_RED);
         /* Copy dummy data to packet */
-        char *msg = "Hello World";
+        char *msg = "Hello WorldHello WorldHellolqkwjdqwkljdhqwkjhdqkwjhdqMITCH";
         strcpy((char *) packet->data, msg);
 
         /* Set packet length */
@@ -217,6 +219,12 @@ int main(void)
 
     /* init kiss interface */
     csp_kiss_init(&csp_if_kiss, &csp_kiss_driver, usart_putc, usart_insert, "KISS");
+
+    /* Setup callback from USART RX to KISS RS */
+    void my_usart_rx(uint8_t * buf, int len, void * pxTaskWoken) {
+        csp_kiss_rx(&csp_if_kiss, buf, len, pxTaskWoken);
+    }
+    usart_set_callback(my_usart_rx);
 
     /* csp buffer must be 256, or mtu in csp_iface must match */
     csp_buffer_init(5, 256);
