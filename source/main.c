@@ -34,8 +34,8 @@
 #include <csp/drivers/usart.h>
 #include <csp/interfaces/csp_if_kiss.h>
 
-#define MY_ADDRESS 1
-#define OTHER_ADDRESS 2
+#define MY_ADDRESS 2
+#define OTHER_ADDRESS 1
 #define MY_PORT    10
 #define BLINK_MS 100
 
@@ -90,7 +90,7 @@ void csp_server(void *p) {
                     /* Process packet here */
                     blink(K_LED_GREEN);
                     csp_buffer_free(packet);
-                    if(!csp_send(conn, response, 1000))
+                    if(!csp_send(conn, response, 100))
                     {
                         blink(K_LED_BLUE);
                     }
@@ -123,9 +123,6 @@ void csp_client(void *p) {
     int signal;
     int pingResult;
 
-    pingResult = csp_ping(MY_ADDRESS, 1000, 100, CSP_O_NONE);
-    printf("Ping with payload of 1 byte, took %d ms\n", pingResult);
-
     /**
      * Try data packet to server
      */
@@ -145,7 +142,7 @@ void csp_client(void *p) {
 
         /* Connect to host HOST, port PORT with regular UDP-like protocol and 1000 ms timeout */
         blink(K_LED_RED);
-        conn = csp_connect(CSP_PRIO_NORM, MY_ADDRESS, MY_PORT, 1000, CSP_O_NONE);
+        conn = csp_connect(CSP_PRIO_NORM, OTHER_ADDRESS, MY_PORT, 100, CSP_O_NONE);
         if (conn == NULL) {
             /* Connect failed */
             /* Remember to free packet buffer */
@@ -162,7 +159,7 @@ void csp_client(void *p) {
         packet->length = strlen(msg);
 
         /* Send packet */
-        if (!csp_send(conn, packet, 1000)) {
+        if (!csp_send(conn, packet, 100)) {
             /* Send failed */
             csp_buffer_free(packet);
         }
@@ -236,7 +233,7 @@ int main(void)
     csp_buffer_init(5, 256);
     csp_init(MY_ADDRESS);
     /* set to route through KISS / UART */
-    csp_route_set(MY_ADDRESS, &csp_if_kiss, CSP_NODE_MAC);
+    csp_route_set(OTHER_ADDRESS, &csp_if_kiss, CSP_NODE_MAC);
     csp_route_start_task(500, 1);
 
     xTaskCreate(csp_server, "CSPSRV", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
@@ -249,3 +246,4 @@ int main(void)
 
     return 0;
 }
+
